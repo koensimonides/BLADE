@@ -4,7 +4,7 @@ from iohblade.experiment import MA_BBOB_Experiment
 from iohblade.llm import Gemini_LLM
 from iohblade.methods import LLaMEA
 from iohblade.loggers import ExperimentLogger
-from llamea import Operator
+from llamea.operator import Operator
 import numpy as np
 import os
 
@@ -100,6 +100,7 @@ if __name__ == "__main__": # prevents weird restarting behaviour
     LLaMEA_method5 = method_SW_UCB("-l", 120, 0.9)          # sliding window ucb (large window)
 
     methods = [LLaMEA_method1, LLaMEA_method2, LLaMEA_method3, LLaMEA_method4, LLaMEA_method5]
+    os.makedirs(f"results/{experiment_name}", exist_ok=True)
     logger = ExperimentLogger(f"results/{experiment_name}")
     experiment = MA_BBOB_Experiment(methods=methods, runs=2, seeds=[4,7], dims=[5], budget_factor=2000, budget=budget, eval_timeout=60, show_stdout=True, exp_logger=logger)
     experiment()

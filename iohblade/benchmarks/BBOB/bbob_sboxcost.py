@@ -3,6 +3,7 @@ import traceback
 
 import ioh
 import numpy as np
+import math
 import pandas as pd
 from ConfigSpace import Configuration, ConfigurationSpace
 from ioh import get_problem
@@ -15,9 +16,9 @@ except Exception:  # pragma: no cover - allow absence in lightweight installs
     AlgorithmConfigurationFacade = None
     Scenario = None
 
-from ..problem import BASE_DEPENDENCIES, Problem
-from ..solution import Solution
-from ..utils import OverBudgetException, aoc_logger, correct_aoc
+from iohblade.problem import BASE_DEPENDENCIES, Problem
+from iohblade.solution import Solution
+from iohblade.utils import OverBudgetException, aoc_logger, correct_aoc
 
 
 class BBOB_SBOX(Problem):
@@ -72,12 +73,14 @@ class BBOB_SBOX(Problem):
         if dependencies is None:
             dependencies = [
                 "pandas==2.2.3",
-                "ioh==0.3.19",
+                "ioh==0.3.22",
                 "configspace==1.2.1",
                 "smac==2.3.1",
             ]
         if imports is None:
-            imports = "import numpy as np\nimport ioh\nimport pandas as pd\n"
+            imports = (
+                "import numpy as np\nimport ioh\nimport pandas as pd\nimport math\n"
+            )
 
         if training_instances is None:
             training_instances = [(f, i) for f in range(1, 25) for i in range(1, 6)]
@@ -138,16 +141,16 @@ class BBOB_SBOX(Problem):
         ]
         self.problem_type = problem_type
         self.benchmark_name = (
-            "SBOX-COST test suite of noiseless box-constrained functions."
+            "test suite of noiseless box-constrained functions."
             if problem_type == ioh.ProblemClass.SBOX
-            else "BBOB test suite of noiseless functions."
+            else "test suite of noiseless functions."
         )
         box_constrained = (
             "box-constrained"
             if problem_type == ioh.ProblemClass.SBOX
             else "unconstrained"
         )
-        extra_prompt = f"The optimization algorithm should handle a wide range of tasks, which is evaluated on the {self.benchmark_name}"
+        extra_prompt = f"The optimization algorithm should handle a wide range of tasks, which is evaluated on a {self.benchmark_name}"
         if (
             self.specific_fid is not None
             and self.specific_fid < 25
@@ -164,17 +167,18 @@ class BBOB_SBOX(Problem):
             extra_prompt = f"The optimization algorithm should work on different instances of noiseless {box_constrained} functions."
 
         self.task_prompt = f"""
-You are a Python expert working on a new optimization algorithm.
+You are a Python expert working on a new optimization algorithm. You can use numpy v2 and some other standard libraries.
 Your task is to develop a novel heuristic optimization algorithm for continuous optimization problems.
-{extra_prompt} Your task is to write the optimization algorithm in Python code. 
+{extra_prompt} Your task is to write the optimization algorithm in Python code.
 Each of the optimization functions has a search space between -5.0 (lower bound) and 5.0 (upper bound). The dimensionality can be varied.
 The code should contain an `__init__(self, budget, dim)` function with optional additional arguments and the function `def __call__(self, func)`, which should optimize the black box function `func` using `self.budget` function evaluations.
-The func() can only be called as many times as the budget allows, not more. 
+The func() can only be called as many times as the budget allows, not more.
 """
         self.example_prompt = """
 An example of such code (a simple random search), is as follows:
 ```python
 import numpy as np
+import math
 
 class RandomSearch:
     def __init__(self, budget=10000, dim=10):
@@ -186,19 +190,19 @@ class RandomSearch:
         self.x_opt = None
         for i in range(self.budget):
             x = np.random.uniform(func.bounds.lb, func.bounds.ub)
-            
+
             f = func(x)
             if f < self.f_opt:
                 self.f_opt = f
                 self.x_opt = x
-            
+
         return self.f_opt, self.x_opt
 ```
         """
         self.format_prompt = """
 Give an excellent and novel heuristic algorithm to solve this task and also give it a one-line description, describing the main idea. Give the response in the format:
 # Description: <short-description>
-# Code: 
+# Code:
 ```python
 <code>
 ```
@@ -219,7 +223,7 @@ Give an excellent and novel heuristic algorithm to solve this task and also give
         code = solution.code
         algorithm_name = solution.name
         algorithm_id = solution.id
-        safe_globals = {"np": np}
+        safe_globals = {"np": np, "ioh": ioh, "math": math}
         local_env = {}
         exec(code, safe_globals, local_env)
 
@@ -240,6 +244,7 @@ Give an excellent and novel heuristic algorithm to solve this task and also give
         # Final validation
         instances = self.test_instances if test else self.training_instances
         aucs = []
+        performance_data = []
         for dim in self.dims:
             for instance in instances:
                 fid, iid = instance  # we expact a tuple of (fid, iid)
@@ -267,13 +272,16 @@ Give an excellent and novel heuristic algorithm to solve this task and also give
                 except OverBudgetException:
                     pass
 
-                aucs.append(correct_aoc(f_new, l2, budget))
+                corrected_aoc = correct_aoc(f_new, l2, budget)
+                performance_data.append(
+                    {"fid": fid, "iid": iid, "dim": dim, "auc": corrected_aoc}
+                )
+                aucs.append(corrected_aoc)
                 l2.reset(f_new)
                 f_new.reset()
 
         auc_mean = np.mean(aucs)
-        auc_std = np.std(aucs)
-
+        solution.add_metadata("performance_data", performance_data)
         solution.add_metadata("aucs", aucs)
         solution.set_scores(
             auc_mean,

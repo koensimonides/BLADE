@@ -54,6 +54,24 @@ class SlidingWindowUCB:
         self.counts[op_id] += 1
         self.sums[op_id] += reward
 
+class FitnessDistributionSelector:
+    def __init__(self, distributions):
+        self.distributions = distributions
+        self.current_fitness = 0.0
+
+    def set_fitness(self, fitness):
+        self.current_fitness = max(0.0, fitness)
+
+    def get_weight(self, op_id):
+        bin_count = len(self.distributions)
+
+        bin_idx = min(
+            int(self.current_fitness * bin_count),
+            bin_count - 1
+        )
+
+        return self.distributions[bin_idx][op_id]
+
 if __name__ == "__main__": # prevents weird restarting behaviour
     experiment_name = "opstrat-select"
     api_key = os.getenv("GEMINI_API_KEY")
@@ -74,6 +92,9 @@ if __name__ == "__main__": # prevents weird restarting behaviour
         ("new2", "Generate a new algorithm that is different from the selected algorithms.", 2),
     ]
 
+    DISTR_TOP3 = [[0.0, 0.3333333333333333, 0.3333333333333333, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.3333333333333333], [0.0, 0.0, 0.3333333333333333, 0.0, 0.0, 0.3333333333333333, 0.0, 0.0, 0.0, 0.3333333333333333], [0.0, 0.0, 0.3333333333333333, 0.0, 0.3333333333333333, 0.3333333333333333, 0.0, 0.0, 0.0, 0.0], [0.0, 0.0, 0.3333333333333333, 0.0, 0.0, 0.3333333333333333, 0.0, 0.0, 0.3333333333333333, 0.0], [0.3333333333333333, 0.0, 0.3333333333333333, 0.0, 0.0, 0.3333333333333333, 0.0, 0.0, 0.0, 0.0], [0.3333333333333333, 0.0, 0.0, 0.0, 0.3333333333333333, 0.3333333333333333, 0.0, 0.0, 0.0, 0.0], [0.0, 0.0, 0.3333333333333333, 0.0, 0.3333333333333333, 0.3333333333333333, 0.0, 0.0, 0.0, 0.0], [0.0, 0.0, 0.3333333333333333, 0.0, 0.3333333333333333, 0.3333333333333333, 0.0, 0.0, 0.0, 0.0]]
+    DISTR_GEOMETRIC = [[0.03128054740957967, 0.12512218963831867, 0.5004887585532747, 0.007820136852394917, 0.0039100684261974585, 0.015640273704789834, 0.0019550342130987292, 0.0009775171065493646, 0.06256109481915934, 0.25024437927663734], [0.03128054740957967, 0.0019550342130987292, 0.12512218963831867, 0.06256109481915934, 0.0009775171065493646, 0.5004887585532747, 0.0039100684261974585, 0.015640273704789834, 0.007820136852394917, 0.25024437927663734], [0.06256109481915934, 0.03128054740957967, 0.5004887585532747, 0.015640273704789834, 0.12512218963831867, 0.25024437927663734, 0.0019550342130987292, 0.0009775171065493646, 0.007820136852394917, 0.0039100684261974585], [0.06256109481915934, 0.0019550342130987292, 0.5004887585532747, 0.015640273704789834, 0.007820136852394917, 0.25024437927663734, 0.0039100684261974585, 0.0009775171065493646, 0.12512218963831867, 0.03128054740957967], [0.12512218963831867, 0.0019550342130987292, 0.5004887585532747, 0.015640273704789834, 0.0039100684261974585, 0.25024437927663734, 0.03128054740957967, 0.0009775171065493646, 0.06256109481915934, 0.007820136852394917], [0.25024437927663734, 0.0009775171065493646, 0.06256109481915934, 0.03128054740957967, 0.12512218963831867, 0.5004887585532747, 0.0019550342130987292, 0.0039100684261974585, 0.015640273704789834, 0.007820136852394917], [0.0019550342130987292, 0.0009775171065493646, 0.12512218963831867, 0.0039100684261974585, 0.25024437927663734, 0.5004887585532747, 0.015640273704789834, 0.06256109481915934, 0.03128054740957967, 0.007820136852394917], [0.0019550342130987292, 0.0009775171065493646, 0.12512218963831867, 0.0039100684261974585, 0.25024437927663734, 0.5004887585532747, 0.015640273704789834, 0.06256109481915934, 0.03128054740957967, 0.007820136852394917]]
+
     def method_random():
         operators = [
             Operator(id=i, task_message=msg, parent_count=pc)
@@ -92,14 +113,39 @@ if __name__ == "__main__": # prevents weird restarting behaviour
             for i, msg, pc in operators_config
         ]
         return LLaMEA(llm, budget=budget, name=f"LLaMEA-sw-ucb{suffix}", operators=operators, n_parents=4, n_offspring=4, elitism=True)
+    
+    def method_distribution(name, distributions):
+        selector = FitnessDistributionSelector(distributions)
 
-    LLaMEA_method1 = method_random()                        # random selection
-    LLaMEA_method2 = method_SW_UCB("", budget, 1.0)         # ucb
-    LLaMEA_method3 = method_SW_UCB("-s", 30, 1.2)           # sliding window ucb (small window)
-    LLaMEA_method4 = method_SW_UCB("-m", 60, 1.0)           # sliding window ucb (medium window)
-    LLaMEA_method5 = method_SW_UCB("-l", 120, 0.9)          # sliding window ucb (large window)
+        operators = [
+            Operator(
+                id=i,
+                task_message=msg,
+                parent_count=pc,
+                weight_source=selector.get_weight,
+            )
+            for i, msg, pc in operators_config
+        ]
 
-    methods = [LLaMEA_method1, LLaMEA_method2, LLaMEA_method3, LLaMEA_method4, LLaMEA_method5]
+        return LLaMEA(
+            llm,
+            budget=budget,
+            name=name,
+            operators=operators,
+            n_parents=4,
+            n_offspring=4,
+            elitism=True,
+        )
+
+    LLaMEA_method1 = method_random()                                            # random selection
+    LLaMEA_method2 = method_SW_UCB("", budget, 1.0)                             # ucb
+    LLaMEA_method3 = method_SW_UCB("-s", 30, 1.2)                               # sliding window ucb (small window)
+    LLaMEA_method4 = method_SW_UCB("-m", 60, 1.0)                               # sliding window ucb (medium window)
+    LLaMEA_method5 = method_SW_UCB("-l", 120, 0.9)                              # sliding window ucb (large window)
+    LLaMEA_method6 = method_distribution("LLaMEA-top3", DISTR_TOP3)             # top3 distribution (preprocessed)
+    LLaMEA_method7 = method_distribution("LLaMEA-geometric", DISTR_GEOMETRIC)   # geometric distribution (preprocessed)
+
+    methods = [LLaMEA_method1, LLaMEA_method2, LLaMEA_method3, LLaMEA_method4, LLaMEA_method5, LLaMEA_method6, LLaMEA_method7]
     os.makedirs(f"results/{experiment_name}", exist_ok=True)
     logger = ExperimentLogger(f"results/{experiment_name}")
     experiment = MA_BBOB_Experiment(methods=methods, runs=2, seeds=[4,7], dims=[5], budget_factor=2000, budget=budget, eval_timeout=60, show_stdout=True, exp_logger=logger)

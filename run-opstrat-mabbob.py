@@ -57,17 +57,15 @@ class SlidingWindowUCB:
 class FitnessDistributionSelector:
     def __init__(self, distributions):
         self.distributions = distributions
-        self.current_fitness = 0.0
 
-    def set_fitness(self, fitness):
-        self.current_fitness = max(0.0, fitness)
+    def get_weight(self, op_id, solution):
+        fitness = max(0.0, solution.fitness)
 
-    def get_weight(self, op_id):
         bin_count = len(self.distributions)
 
         bin_idx = min(
-            int(self.current_fitness * bin_count),
-            bin_count - 1
+            int(fitness * bin_count),
+            bin_count - 1,
         )
 
         return self.distributions[bin_idx][op_id]

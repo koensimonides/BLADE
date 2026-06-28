@@ -37,7 +37,7 @@ class SlidingWindowUCB:
 
         return max(self.operator_ids, key=self._ucb_score)
 
-    def get_weight(self, op_id):
+    def get_weight(self, op_id, solution):
         best = self._best_operator()
         return 1.0 if op_id == best else 0.0
 
@@ -55,20 +55,20 @@ class SlidingWindowUCB:
         self.sums[op_id] += reward
 
 class FitnessDistributionSelector:
-    def __init__(self, distributions):
-        self.distributions = distributions
+    def __init__(self, operator_ids, distributions):
+        self.distributions = [
+            dict(zip(operator_ids, row))
+            for row in distributions
+        ]
 
     def get_weight(self, op_id, solution):
         fitness = max(0.0, solution.fitness)
 
         bin_count = len(self.distributions)
 
-        bin_idx = min(
-            int(fitness * bin_count),
-            bin_count - 1,
-        )
+        bin_idx = min(int(fitness * bin_count), bin_count - 1)
 
-        return self.distributions[bin_idx][op_id]
+        return self.distributions[bin_idx].get(op_id, 0.0)
 
 if __name__ == "__main__": # prevents weird restarting behaviour
     experiment_name = "opstrat-select"
@@ -113,7 +113,7 @@ if __name__ == "__main__": # prevents weird restarting behaviour
         return LLaMEA(llm, budget=budget, name=f"LLaMEA-sw-ucb{suffix}", operators=operators, n_parents=4, n_offspring=4, elitism=True)
     
     def method_distribution(name, distributions):
-        selector = FitnessDistributionSelector(distributions)
+        selector = FitnessDistributionSelector([op[0] for op in operators_config], distributions)
 
         operators = [
             Operator(

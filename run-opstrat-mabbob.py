@@ -65,7 +65,6 @@ class FitnessDistributionSelector:
         fitness = max(0.0, solution.fitness)
 
         bin_count = len(self.distributions)
-
         bin_idx = min(int(fitness * bin_count), bin_count - 1)
 
         return self.distributions[bin_idx].get(op_id, 0.0)
@@ -73,7 +72,7 @@ class FitnessDistributionSelector:
 if __name__ == "__main__": # prevents weird restarting behaviour
     experiment_name = "opstrat-select"
     api_key = os.getenv("GEMINI_API_KEY")
-    ai_model = "gemini-2.0-flash"
+    ai_model = "gemini-3.1-flash-lite"
     llm = Gemini_LLM(api_key, ai_model)
     budget = 400
 
@@ -146,7 +145,7 @@ if __name__ == "__main__": # prevents weird restarting behaviour
     methods = [LLaMEA_method1, LLaMEA_method2, LLaMEA_method3, LLaMEA_method4, LLaMEA_method5, LLaMEA_method6, LLaMEA_method7]
     os.makedirs(f"results/{experiment_name}", exist_ok=True)
     logger = ExperimentLogger(f"results/{experiment_name}")
-    experiment = MA_BBOB_Experiment(methods=methods, runs=2, seeds=[4,7], dims=[5], budget_factor=2000, budget=budget, eval_timeout=60, show_stdout=True, exp_logger=logger)
+    experiment = MA_BBOB_Experiment(methods=methods, runs=5, seeds=[4,7,9,12,15], dims=[5], budget_factor=2000, budget=budget, eval_timeout=60, show_stdout=True, exp_logger=logger)
     experiment()
 
 

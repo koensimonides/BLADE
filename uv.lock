@@ -2952,7 +2952,7 @@ wheels = [
 [[package]]
 name = "llamea"
 version = "1.1.10"
-source = { git = "https://github.com/koensimonides/LLaMEA.git?rev=feature%2Fcrossover#b56f878bd20270beca9e076693a2717669241083" }
+source = { git = "https://github.com/koensimonides/LLaMEA.git?rev=feature%2Fcrossover#ba27ac19a2a4771a8ce826da3fbf4ed82e7aca91" }
 dependencies = [
     { name = "configspace" },
     { name = "google-generativeai" },
